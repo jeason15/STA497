@@ -1,0 +1,146 @@
+---
+title: "Social distancing data: protest trajectories"
+author: "Aimee Schwab-McCoy"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height=4)
+```
+
+# Data input and cleaning
+
+```{r}
+County_Data <- read.csv("E:\\ProjectData\\unacast\\sds-v3-full-county.csv")
+LockdownProtests <- read.csv("E:\\ProjectData\\unacast\\LockdownProtests.csv")
+demographic <- read.csv("E:\\ProjectData\\unacast\\2014-2018-acs-counties.csv")
+electoral <- read.csv("E:\\ProjectData\\unacast\\2016b-electoral-counties.csv")
+business <- read.csv("E:\\ProjectData\\unacast\\2016-county-business.csv")
+
+library(tidyverse)
+library(patchwork)
+
+FIPS_list <- unique(LockdownProtests$FIPS)
+State_list <- unique(LockdownProtests$STATE)
+
+County_Data$date <- as.Date(County_Data$date)
+LockdownProtests$DATE <- as.Date(LockdownProtests$DATE)
+```
+
+# Standardize within each county and plot
+
+These plots show the trajectories on the same "scale" for all counties within a state. Idea: If the protests are making a difference, then those should have a different pattern.
+
+- Standardized using z-scores.
+
+
+```{r}
+County_Standard <- County_Data %>% 
+  group_by(county_fips) %>%
+  mutate_each_(funs(scale),vars=c('daily_distance_diff',
+                                  'daily_visitation_diff',
+                                  'encounters_rate'))
+
+for(i in 1:length(State_list)){
+  
+  plot1 <- County_Standard %>% 
+    filter(state_code==as.character(State_list)[i]) %>%
+    mutate(protest = ifelse(county_fips %in% FIPS_list, 2, 1)) %>%
+    arrange(desc(protest)) %>%
+    ggplot(aes(x=date, y=daily_distance_diff, group=county_fips)) + 
+    geom_line(aes(col=protest, alpha=protest/2)) + 
+    guides(col=FALSE, lwd=FALSE, alpha=FALSE) + 
+    labs(title=paste('State: ', State_list[i])) 
+  
+  plot2 <- County_Standard %>% 
+    filter(state_code==as.character(State_list)[i]) %>%
+    mutate(protest = ifelse(county_fips %in% FIPS_list, 2, 1)) %>%
+    arrange(desc(protest)) %>%
+    ggplot(aes(x=date, y=daily_visitation_diff, group=county_fips)) +
+    geom_line(aes(col=protest, alpha=protest/2)) + 
+    guides(col=FALSE, lwd=FALSE, alpha=FALSE) + 
+    labs(title=paste('State: ', State_list[i]))
+    
+  plot3 <- County_Standard %>% 
+    filter(state_code==as.character(State_list)[i]) %>%
+    mutate(protest = ifelse(county_fips %in% FIPS_list, 2, 1)) %>%
+    arrange(desc(protest)) %>%
+    ggplot(aes(x=date, y=encounters_rate, group=county_fips)) + 
+    geom_line(aes(col=protest, alpha=protest/2)) + 
+    guides(col=FALSE, lwd=FALSE, alpha=FALSE) + 
+    labs(title=paste('State: ', State_list[i]))
+
+   print(plot1 + plot2 + plot3)
+}
+
+```
+
+# County trajectories with dates
+
+```{r, cache=TRUE}
+for(i in 1:length(FIPS_list)){
+  
+    protests_i <- LockdownProtests %>% filter(FIPS == FIPS_list[i])
+    county_i <- County_Data %>% filter(county_fips == FIPS_list[i]) 
+    
+   plot1 <- county_i %>%
+      ggplot(aes(x=date, y=daily_distance_diff)) + 
+      geom_point() + 
+      geom_line(alpha=0.5) + 
+      geom_smooth(se=TRUE) + 
+      geom_vline(xintercept=protests_i$DATE, col='red') + 
+      labs(title=paste(county_i$county_name[1], ',', county_i$state_code[1])) 
+   
+   plot2 <- county_i %>%
+      ggplot(aes(x=date, y=daily_visitation_diff)) + 
+      geom_point() + 
+      geom_line(alpha=0.5) + 
+      geom_smooth(se=TRUE) + 
+      geom_vline(xintercept=protests_i$DATE, col='red') + 
+      labs(title=paste(county_i$county_name[1], ',', county_i$state_code[1])) 
+   
+   plot3 <- county_i %>%
+      ggplot(aes(x=date, y=encounters_rate)) + 
+      geom_point() + 
+      geom_line(alpha=0.5) + 
+      geom_smooth(se=TRUE) + 
+      geom_vline(xintercept=protests_i$DATE, col='red') + 
+      labs(title=paste(county_i$county_name[1], ',', county_i$state_code[1])) 
+   
+   # Use aes_() to force immediate evaluation 
+   # instead of aes(), which evaluates when printed
+   for(j in 1:length(protests_i$DATE)){
+      plot1 <- plot1 +
+        geom_text(aes_(x=protests_i$DATE[j], 
+                    label=protests_i$DATE[j], 
+                    y=0),
+                colour="red", 
+                angle=90, 
+                vjust = 1.2, 
+                text=element_text(size=9))
+      
+      plot2 <- plot2 +
+        geom_text(aes_(x=protests_i$DATE[j], 
+                    label=protests_i$DATE[j], 
+                    y=0),
+                colour="red", 
+                angle=90, 
+                vjust = 1.2, 
+                text=element_text(size=9))
+      
+      plot3 <- plot3 +
+        geom_text(aes_(x=protests_i$DATE[j], 
+                    label=protests_i$DATE[j], 
+                    y=quantile(county_i$encounters_rate, 0.75)),
+                colour="red", 
+                angle=90, 
+                vjust = 1.2, 
+                text=element_text(size=9))
+   }
+   
+   print(plot1 + plot2 + plot3)
+}
+```

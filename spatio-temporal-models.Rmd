@@ -1,0 +1,220 @@
+---
+title: "Spatio-Temporal Models"
+author: "Joshua Eason"
+date: "10/16/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(stR)
+library(plotly)
+library(usmap)
+library(fitdistrplus)
+
+```
+
+Some additional data wrangling. Making one final time-series dataset which includes only the covid-related features, all time-series observations with the associated coordinates and class designations from the PCA. 
+```{r}
+
+no_covid <- read.csv("/mnt/18246CDB246CBCFE/ProjectData/unacast/post-pca.csv")
+covid <- read.csv("/mnt/18246CDB246CBCFE/ProjectData/unacast/covid_ts.csv")
+dims <- no_covid %>% dplyr::select(FIPS, Dim.1,Dim.2,class2,polyname)
+ts_data <- inner_join(covid,dims,by = 'FIPS') %>% dplyr::select(-X)
+ts_data$date <- as.Date(ts_data$date)
+
+maps::county.fips %>%
+  as_tibble %>% 
+  extract(polyname, c("region", "subregion"), "^([^,]+),([^,]+)$") -> dfips
+map_data("county") %>% 
+  left_join(dfips) -> data
+```
+
+
+Cool looking, but not very helpful...
+```{r}
+
+plot_ly(dims, x = ~Dim.1, y = ~Dim.2, z = ~no_covid$Median.Household.Income, 
+        marker = list(color = ~no_covid$Median.Household.Income, colorscale = c("Viridis"), showscale = TRUE)) %>%
+  add_markers()  %>%
+  layout(
+    title = 'Counties by PCA Coordinates',
+    scene = list(xaxis = list(title = 'Dim 1'),
+                 yaxis = list(title = 'Dim 2'),
+                 zaxis = list(title = 'MHHI')))
+```
+
+## Pre-Covid Models 
+Fitting a linear regression model to see which variables are significant for predicting the metrics we care about before covid
+
+Creating a subset based on a single day (2/24/2020)
+```{r}
+day <- ts_data %>% filter(date == as.Date("2020-02-24"))
+features <- day %>% dplyr::select(-c("FIPS","covid","date","county_name","state_code","polyname","week"))
+vis_only <- features %>% dplyr::select(-c("daily_distance_diff","encounters_rate"))
+dist_only <- features %>% dplyr::select(-c("daily_visitation_diff","encounters_rate"))
+encounter_only <- features %>% dplyr::select(-c("daily_distance_diff","daily_visitation_diff"))
+```
+
+Basic LM - each of the three for 2/24/2020
+```{r}
+#Visitation only
+model_vis <- lm(daily_visitation_diff ~., data = vis_only)
+summary(model_vis)
+
+#Distance only
+model_dist <- lm(daily_distance_diff ~., data = dist_only)
+summary(model_dist)
+
+#Encounter rate only
+model_encounter <- lm(encounters_rate ~., data = encounter_only)
+summary(model_encounter)
+```
+
+Creating a subset based on a single day (3/08/2020)
+```{r}
+day <- ts_data %>% filter(date == as.Date("2020-03-08"))
+features <- day %>% dplyr::select(-c("FIPS","covid","date","county_name","state_code","polyname","week"))
+vis_only <- features %>% dplyr::select(-c("daily_distance_diff","encounters_rate"))
+dist_only <- features %>% dplyr::select(-c("daily_visitation_diff","encounters_rate"))
+encounter_only <- features %>% dplyr::select(-c("daily_distance_diff","daily_visitation_diff"))
+```
+
+Basic LM - each of the three for 3/08/2020
+```{r}
+#Visitation only
+model_vis <- lm(daily_visitation_diff ~., data = vis_only)
+summary(model_vis)
+
+#Distance only
+model_dist <- lm(daily_distance_diff ~., data = dist_only)
+summary(model_dist)
+
+#Encounter rate only
+model_encounter <- lm(encounters_rate ~., data = encounter_only)
+summary(model_encounter)
+```
+
+
+## Post-Covid Models
+Here I fitted the same linear regression on each of the three adherence metrics to see which variables are significant for two randomly selected dates post covid...
+
+Creating a subset based on a single day (4/1/2020)
+```{r}
+day <- ts_data %>% filter(date == as.Date("2020-04-01"))
+features <- day %>% dplyr::select(-c("FIPS","covid","date","county_name","state_code","polyname","week"))
+vis_only <- features %>% dplyr::select(-c("daily_distance_diff","encounters_rate"))
+dist_only <- features %>% dplyr::select(-c("daily_visitation_diff","encounters_rate"))
+encounter_only <- features %>% dplyr::select(-c("daily_distance_diff","daily_visitation_diff"))
+```
+
+Basic LM - each of the three for 4/01/2020
+```{r}
+#Visitation only
+model_vis <- lm(daily_visitation_diff ~., data = vis_only)
+summary(model_vis)
+
+#Distance only
+model_dist <- lm(daily_distance_diff ~., data = dist_only)
+summary(model_dist)
+
+#Encounter rate only
+model_encounter <- lm(encounters_rate ~., data = encounter_only)
+summary(model_encounter)
+```
+
+Creating a subset based on a single day (5/17/2020)
+```{r}
+day <- ts_data %>% filter(date == as.Date("2020-05-17"))
+features <- day %>% dplyr::select(-c("FIPS","covid","date","county_name","state_code","polyname","week"))
+vis_only <- features %>% dplyr::select(-c("daily_distance_diff","encounters_rate"))
+dist_only <- features %>% dplyr::select(-c("daily_visitation_diff","encounters_rate"))
+encounter_only <- features %>% dplyr::select(-c("daily_distance_diff","daily_visitation_diff"))
+```
+
+Basic LM - each of the three for 5/17/2020
+```{r}
+#Visitation only
+model_vis <- lm(daily_visitation_diff ~., data = vis_only)
+summary(model_vis)
+
+#Distance only
+model_dist <- lm(daily_distance_diff ~., data = dist_only)
+summary(model_dist)
+
+#Encounter rate only
+model_encounter <- lm(encounters_rate ~., data = encounter_only)
+summary(model_encounter)
+```
+
+## What are the distributions of the response variables for each of the days?
+
+Here, it looks like I may have 3 different distributions of the response variables, this suggests that I may need to consider different formula families for the GLM to model them properly. It may also be the case that they are all poisson distributed. 
+```{r}
+#visualizing the distribution of the response variables to help decide the distribution
+
+#Normal-ish? Higher lambda
+vis_only_nontrivial <- vis_only %>% filter(daily_visitation_diff != 0) 
+vis_only_nontrivial %>% ggplot(aes(x = daily_visitation_diff)) + geom_histogram(bins = 50)
+
+#Skew right - Lower lambda
+dist_only_nontrivial <- dist_only %>% filter(daily_distance_diff != 0) 
+dist_only_nontrivial %>% ggplot(aes(x = daily_distance_diff)) + geom_histogram(bins = 50)
+
+#Very skew right - very low lambda
+encounter_only_nontrivial <- encounter_only %>% filter(encounters_rate != 0) 
+encounter_only_nontrivial %>% ggplot(aes(x = log(encounters_rate))) + geom_histogram(bins = 50)
+
+```
+
+
+```{r}
+#dailies are both "normal"
+#encounters to log-normal
+dist <- descdist(vis_only$daily_visitation_diff,  discrete = FALSE)
+ft <- fitdist(vis_only$daily_visitation_diff, distr = "norm" )
+ft
+denscomp(ft)
+
+```
+
+
+This still doesnt work...
+```{r}
+#need to remove the dimensions from the glm to run the simple version.
+
+#https://datascienceplus.com/spatial-regression-in-r-part-1-spamm-vs-glmmtmb/
+
+vis_only <- vis_only %>% dplyr::select(-c("Dim.1","Dim.2","class2"))
+
+vis_glm <- glm(vis_only$daily_visitation_diff~., family=gaussian("identity"), data= vis_only)
+summary(vis_glm)
+
+```
+
+# Grouping by week
+```{r}
+library(dplyr)
+ts_week <- ts_data %>% dplyr::group_by(FIPS,week) %>% dplyr::summarize(dist = mean(daily_distance_diff),
+                                                    vis = mean(daily_visitation_diff),
+                                                    encounter = mean(encounters_rate),
+                                                    cases = max(cases),
+                                                    deaths = max(deaths),
+                                                    week = max(week),
+                                                    death_rate = max(death_rate),
+                                                    death_per_capita = max(death_per_capita),
+                                                    dim1 = max(Dim.1),
+                                                    dim2= max(Dim.2))
+
+```
+
+# Fitting a model to the time series data
+
+```{r}
+library(lme4)
+model <- lmer(encounter ~ week + cases + deaths + death_rate + death_per_capita + (1|dim1) + (1|dim2),data=ts_week)
+summary(model)
+```
+
+

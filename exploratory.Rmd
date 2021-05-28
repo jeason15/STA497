@@ -1,0 +1,160 @@
+---
+title: "STA 497 Exploratory & Data Cleaning"
+author: "Joshua Eason"
+date updated: sys_Date()
+output: html_document
+---
+
+```{r}
+library(readr)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+#remotes::install_github("kjhealy/covdata")
+library(covdata)
+library(corrplot)
+library(xts)
+```
+
+```{r}
+County_Data <- read.csv("E:\\ProjectData\\unacast\\sds-v3-full-county.csv")
+LockdownProtests <- read.csv("E:\\ProjectData\\unacast\\LockdownProtests.csv")
+demographic <- read.csv("E:\\ProjectData\\unacast\\2014-2018-acs-counties.csv")
+electoral <- read.csv("E:\\ProjectData\\unacast\\2016b-electoral-counties.csv")
+business <- read.csv("E:\\ProjectData\\unacast\\2016-county-business.csv")
+regulations <- read.csv("E:\\ProjectData\\unacast\\owid-covid-data.csv")
+policy <- read.csv("E:\\ProjectData\\unacast\\state_policy.csv")
+county_mortality <- read.csv("E:\\ProjectData\\unacast\\covid-by-county.csv")
+data("nytcovcounty")
+```
+
+creating a new dataset containing all of the data from the datasets, combined by county
+```{r}
+colnames(nytcovcounty)[4] <- "FIPS"
+colnames(county_mortality)[4] <- "FIPS"
+county_mortality$date <- as.Date(county_mortality$date)
+colnames(County_Data)[4]<-"FIPS"
+full_data <- merge(County_Data, demographic, by="FIPS")
+full_data <- merge(full_data, electoral, by="FIPS")
+colnames(full_data)[22]<-"GEOID"
+full_data <- merge(full_data, business, by="GEOID")
+full_data$date <- as.Date(full_data$date)
+nytcovcounty$FIPS <- as.integer(nytcovcounty$FIPS)
+#colnames(full_data)
+
+final_data <- full_data %>% select(c("FIPS", "state_code", "county_name", "county_population", "date", "covid", "daily_distance_diff", "daily_visitation_diff", "encounters_rate", "Latitude.x", "Longitude.x", "Square.Miles", "Total.Households", "Average.Household.Size", "X..Living.Alone", "X..Bachelors.Degree", "X..Graduate.Degree", "X..Broadband", "Median.Household.Income", "Mean.Minutes.To.Work", "Gini.Index", "X..Unemployment.Rate", "Median.Age", "WIN2016", "PCDEM2016", "PCGOP2016", "PCOBESITY", "All.Establishments", "All.Employees", "All.Payroll"))
+
+final_data <- full_join(final_data, nytcovcounty, by=c("FIPS","date"))
+
+final_data <- final_data %>% mutate(week = strftime(date, format = "%V"),
+                                    death_rate = deaths/cases,
+                                    death_per_capita = deaths/county_population)
+
+
+
+covid <- final_data %>% select(c("state_code","county_name","FIPS","date","covid","daily_distance_diff","daily_visitation_diff","encounters_rate","cases","deaths","week","death_rate","death_per_capita"))
+covid <- covid %>% arrange(FIPS,date) %>% drop_na("state_code")
+covid[is.na(covid)] = 0
+
+write.csv(covid, "E:\\ProjectData\\unacast\\covid_ts.csv")
+
+# Here, I scaled all of the numneric variables
+final_scaled <- final_data %>% mutate_if(is.numeric, scale)
+
+glimpse(final_data)
+```
+
+```{r}
+
+small_county_data <- County_Data %>% filter(state_code %in% c("FL", "NY", "CA", "NE", "WA", "TX", "IL")) %>%
+  select(c('FIPS', 'state_code', 'county_name', 'county_population', 'date', 'covid', 'daily_distance_diff', 'daily_visitation_diff', 'encounters_rate'))
+
+small_county_stats <- small_county_data %>% group_by(FIPS, covid) %>%
+  dplyr::summarise(n = n(),
+            pop = sum(county_population)/n,
+            daily_distance_diff = mean(daily_distance_diff),
+            daily_visitation_diff = mean(daily_visitation_diff),
+            encounters_rate = mean(encounters_rate))
+```
+
+
+plotting just county population versus mean pre and post covid, only pre/post covid time dependency
+```{r}
+pop_distance <- small_county_stats %>% ggplot(aes(x = daily_distance_diff, y = pop, color = covid)) +
+  geom_point()
+
+pop_distance
+
+pop_visit <- small_county_stats %>% ggplot(aes(x = daily_visitation_diff, y = pop, color = covid)) +
+  geom_point()
+
+pop_visit
+
+pop_encounter <- small_county_stats %>% ggplot(aes(x = encounters_rate, y = pop, color = covid)) +
+  geom_point() + scale_x_log10()
+
+pop_encounter
+
+```
+
+
+Interesting plot I was telling you about...
+```{r}
+final_data %>% ggplot(aes(x = PCOBESITY, y = Median.Household.Income, color = WIN2016)) +
+  geom_point()
+
+```
+Adding new COVID Data
+```{r}
+# data(covus)
+# glimpse(covus)
+# 
+# wide_covid <- covus %>% spread(measure, count) %>% select(-c(data_quality_grade,measure_label))
+# wide_covid[is.na(wide_covid)] <- 0
+# 
+# colnames(wide_covid)[2] <- "state_code"
+# 
+# covid_agg <- wide_covid %>% group_by(date,state_code) %>%
+#   summarise(deaths = sum(death_confirmed),
+#             hospitalizations = sum(hospitalized_currently),
+#             positive = sum(positive),
+#             pending_results = sum(pending),
+#             recovered = sum(recovered))
+# 
+# final_data <- merge(full_data, covid_agg, by=c("FIPS","date"))
+
+
+#write.csv(final_data, "E:\\ProjectData\\unacast\\final-data.csv")
+
+# ggplot(final_data, aes(x = date, y = death_rate, fill = WIN2016)) + geom_histogram(stat = "identity", position = "dodge")
+```
+
+```{r fig.height=15, fig.width=15}
+#final_num_data <- final_data %>% select_if(is.numeric) %>% mutate(covid = final_data$covid)
+
+#write.csv(final_num_data, "E:\\ProjectData\\unacast\\final-num-data.csv")
+
+
+```
+
+
+```{r}
+# 
+# week_22 <- final_data %>% filter(week == 17)
+# 
+# model <- lm(daily_distance_diff ~ county_population + , week_22)
+# 
+# summary(model)
+# 
+# summary(week_22)
+# 
+# model2 <- lm(daily_visitation_diff ~ . -Latitude.x - Longitude.x - county_name - state_code - covid - daily_distance_diff - encounters_rate - county - state - week, week_12)
+# 
+# summary(model2)
+# 
+# model3 <- lm(encounters_rate ~ . -Latitude.x - Longitude.x - county_name - state_code - covid - daily_distance_diff - daily_visitation_diff - county - state - week, week_12)
+# 
+# summary(model3)
+
+```
+

@@ -1,0 +1,432 @@
+---
+title: "STA 497 Final Project Report"
+author: "Joshua Eason"
+date: "5/28/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(caret)
+library(USA.county.data)
+library(factoextra)
+library(devtools)
+library(corrplot)
+library(ggbiplot)
+library(readxl)
+library(tidyverse)
+
+set.seed(1023)
+```
+
+# Introduction:
+
+Researchers strive to be able to accurately account for as much variance in any given data as possible as a means to ensure that any given analysis or machine learning task meets a certain desired level of accuracy. Often times, this can be a very challenging task, especially when faced with data with high degrees of uncertainty from sources that are difficult to identify, quantify, and mitigate. In this research project, we have created an orthogonal "coordinate system" to describe the socioeconomic makeup of a large portion of the counties in the United States. The coordinate system given here serves as a non-spatially dependent set of points which can be used to locate a particular county in terms of its underlying population instead of more traditional methods such as latitude and longitude. To do this, we will first collect, compile, and engineer data from several sources. Next, we will perform a Principal Components Analysis (PCA) to extract our two new feature dimensions. Finally, we will display the results of our reduced-dimension data, and attempt to predict the results of the 2020 election using only our two coordinates as predictors. This final step of the analysis will serve as a means to validate the coordinate system as one which accurately describes each county.
+
+Using this newly formed system, researchers will be armed with a tool that can help them account for and mitigate variance and uncertainty in their data. This will help strengthen accuracy of predictions and statistical analyses in areas of study which rely heavily on socioeconomic and demographic information.
+
+# Data Collection and Processing:
+
+The data set represents demographic data collected and combined from several sources, including; Unacast COVID-19 data, census data, religious data, and additional political and demographic data. This data set attempts to combine data from many sources into a single cohesive aggregate set of predictors. In discovering data, it was important to use data that was as complete as possible, represented each county, was recent enough to be valid, and covered as much of the underlying variance as possible. Additionally, some features required aggregation and transformation, and additional features were engineered to provide a comprehensive set of features from which to perform the PCA. Below, the data dictionary for the final data is given:
+
+```{r,include=FALSE}
+original_data <- read.csv("/mnt/18246CDB246CBCFE/ProjectData/unacast/final-data.csv")
+
+data <- original_data %>% select(-c(X,date,covid,Latitude.x,Longitude.x,covid,county_name,state_code,WIN2016))
+
+data_county <- data %>% group_by(FIPS) %>% summarise(county_population_density=max(county_population)/max(Square.Miles),          daily_distance_diff=min(daily_distance_diff),                                                     encounters_rate=min(encounters_rate),                                                                                 avg_hh_size=max(Average.Household.Size),                                                     living_alone=max(X..Living.Alone),                                                     bach_degree=max(X..Bachelors.Degree),                                                     grad_degree=max(X..Graduate.Degree),                                                     internet_access=max(X..Broadband),                                                     mhhi=max(Median.Household.Income),                                                     mean_min_to_work=max(Mean.Minutes.To.Work),gini=max(Gini.Index),                                                     unemployment=max(X..Unemployment.Rate),median_age=max(Median.Age),                                                     perc_dem_2016=max(PCDEM2016),perc_gop_2016=max(PCGOP2016),                                                     perc_obesity=max(PCOBESITY),                                                     establishments=max(All.Establishments),                                                     employees=max(All.Employees),payroll=max(All.Payroll)) 
+
+data_county <- distinct(data_county)
+data_county <- na.omit(data_county)
+
+
+religion_data <- read_excel("/mnt/18246CDB246CBCFE/ProjectData/unacast/religion.xlsx")
+religion_data_small <- religion_data %>% select(FIPS, TOTCNG, TOTRATE)
+data_county <- inner_join(data_county,religion_data_small,by = 'FIPS')
+
+data(USA_county_data)
+
+county_data <- USA_county_data %>% select(fips, White, Black, Hispanic, Asian, Amerindian, Other, Children.Under.6.Living.in.Poverty, Child.Poverty.living.in.families.below.the.poverty.line, Children.in.single.parent.households, Adults.65.and.Older.Living.in.Poverty, Preschool.Enrollment.Ratio.enrolled.ages.3.and.4, Uninsured) %>% rename(FIPS=fips)
+
+data_county <- inner_join(data_county,county_data,BY="FIPS")
+data_county <- na.omit(data_county)
+
+data_county <- data_county %>% mutate(party=case_when((data_county$perc_dem_2016-data_county$perc_gop_2016) < 0 ~ "gop",
+                                                      (data_county$perc_dem_2016-data_county$perc_gop_2016) > 0 ~ "dem"))
+```
+
++----------------------------------------------------+-----------------------------------------------------------------+
+| Variable                                           | Description                                                     |
++====================================================+=================================================================+
+| `FIPS`                                             | Federal Information Processing Standards code for the county    |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `county_population_density`                        | population per square mile                                      |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `daily_distance_diff`                              | minimum measurement of difference in daily visitation           |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `encounters_rate`                                  | minimum measurement of difference in daily encounters           |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `avg_hh_size`                                      | size of average household (in people)                           |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `living_alone`                                     | percentage of residents living alone                            |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `bach_degree`                                      | percentage of residents who have completed a bachelor's degree  |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `grad_degree`                                      | percentage of residents who have completed a graduate degree    |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `internet_access`                                  | percentage of residents who have broadband internet access      |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `mhhi`                                             | median household income (in USD)                                |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `mean_min_to_work`                                 | mean commute to work (in minutes)                               |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `gini`                                             | county gini index                                               |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `unemployment`                                     | percent of residents unemployed                                 |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `median_age`                                       | median age of residents (in years)                              |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `perc_dem_2016`                                    | percentage of vote to Democrats in 2016                         |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `perc_gop_2016`                                    | percentage of vote to Republicans in 2016                       |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `perc_obesity`                                     | percentage of residents who are obese                           |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `establishments`                                   | number of business establishments                               |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `employees`                                        | number of total employees                                       |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `payroll`                                          | total payroll (in USD)                                          |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `TOTCNG`                                           | total number of religious congregations                         |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `TOTRATE`                                          | number of residents that are religious adherents per 1000       |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `White`                                            | percent of the population that self identify as White           |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `Black`                                            | percent of the population that self identify as Black           |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `Hispanic`                                         | percent of the population that self identify as Hispanic        |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `Asian`                                            | percent of the population that self identify as Asian           |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `Amerindian`                                       | percent of the population that self identify as American Indian |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `Other`                                            | percent of the population that self identify as other           |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `Children.Under.6.Living.in.Poverty`               | percentage of children under 6 living in poverty                |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `Children.in.single.parent.households`             | percentage of children living in single parent households       |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `Adults.65.and.Older.Living.in.Poverty`            | percentage of adults over 65 living in poverty                  |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `Preschool.Enrollment.Ratio.enrolled.ages.3.and.4` | percentage of 3 and 4 year old children enrolled in preschool   |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `Uninsured`                                        | proportion of population without health insurance               |
++----------------------------------------------------+-----------------------------------------------------------------+
+| `party`                                            | party with higher proportion of vote in 2016                    |
++----------------------------------------------------+-----------------------------------------------------------------+
+
+Additionally, we will take a look at the kind of data we are dealing with in terms of data type and some example observations for each of the predictors. From this, we can see that 3,034 of the 3,142 counties are represented. The exclusion of certain counties is due to the fact that there are important features which sparsely contained values of `N/A`, with no reliable means of imputation. From our original data sources, we have compiled and engineered 35 features which we believe accurately describe the socioeconomic and demographic makeup of each county in a way that enables us to continue with the creation of our feature dimensions via PCA. The features selected are all numeric, with the exception of `party`, which will be used purely for assistance in visualization of the dimensions that are plotted when we analyze our principal components. It is important to note that PCA requires a standardization of the data, which will be done at the time the data is preprocessed for the PCA just before it is fed into the model. However, it must be considered nonetheless. We will use z-standardization, $Z = \frac{y_i-\mu}{s}$, where $s = \frac{\sigma}{\sqrt{n}}$. These $Z$-scores transforms each predictor to a scale with mean $\mu = 0$, and $\sigma = 1$. Hence, all observations will express the number of standard deviations from the mean, 0, each point exists. This is necessary to ensure that the magnitude of any individual variable does not cause that variable to become more "important" than any other. If each of our predictors were all in the same unit of measure, this would not be necessary. From our data dictionary, and the table below, we can see that this process will be crucial to our model.  
+
+```{r,echo=FALSE}
+glimpse(data_county)
+```
+
+The correlation matrix below shows us which variables are related to others, as well as uncovers certain trends in our data. This will be a useful tool in our analysis of the feature dimensions that we will extract from our PCA. Looking at the plot, we can see some things that our intuition would suggest. For instance, The associations between `uninsured` and the other covariates follows a relationship that we would expect; education, lack of poverty, and in some cases, race all share a negative association with lacking insurance. `county_population_density` also shares associations that are reasonable. Because the PCA technique creates linearly independent components, we do not need to be concerned about any multicollinearity in our data. This plot does serve as a good means by which we can verify the reasonableness of our data set. It gives us a good sense of whether our data is likely accurate, especially because of the means by which it was built from several distinct data sets from different sources. 
+
+```{r fig.height=15, fig.width=15,echo=FALSE}
+features <- data_county %>% select(-c(FIPS,party))
+corr <- cor(features, use="pairwise.complete.obs")
+corrplot(corr)
+```
+
+# Principal Components Analysis:
+
+In this section, we will perform the Principal Components Analysis on the data. As discussed previously, this technique creates a set of $p-1$ principal components from $p$ original predictors. Each one of the resultant PC's are linearly independent from one another, making them a great tool for use in modeling techniques that require independence of predictors. From these PC's we have decided to choose only the first two, which will represent our transformed coordinate system, though generally, this choice for number of components to be used would occur after the PCA is fit. The summary below shows us the proportion of variance in the data that each of the PC's can "account" for. In our case, PC1 accounts for about 22.72% of the variance in the data, and PC2 accounts for about 18.93% of the variance in the data. Generally speaking, the number of PC's selected would be based on the cumulative proportion of variance explained, with the goal being to choose a threshold of variance, say 90%, and choose the number of PC's necessary to cumulatively account for that. Our choice of 2 PC's leaves our cumulative explained variance low, being only at about 41.65%. However, we have provided justification for our choice based on our needs, and feel that this is sufficient. 
+
+```{r}
+pca_features <- data_county %>% select(-c(FIPS,party))
+pca <- prcomp(pca_features, center = TRUE, scale. = TRUE)
+summary(pca)
+```
+
+The scree plot below is also generally used to choose the number of principal components that will be retained as features. In addition to the cumulative variance, from the scree plot, we would generally also like to choose the number of components that fall at around the "elbow" in the plot, or where the rate of change from one component to the next varies the largest. Here, you can see that the first elbow occurs at PC2, with additional smaller elbows at PC6 and PC9. This is encouraging, because we can see that our two PCs that we will retain have a much greater importance in relation to all of the others, and share a similar amount of importance with each other. 
+
+```{r fig.height=10, fig.width=10}
+fviz_eig(pca, main='Scree plot: COIVD Feature Selection', addlabels=TRUE)
+```
+
+The plot below helps us visualize the contribution of individual predictors from the data set to each of our retained components. From this, we can see that race, age, and political affiliations have a strong effect on the first dimension, while education and other economic factors have a strong effect on the second dimension.  
+
+```{r fig.height=10, fig.width=10}
+fviz_pca_var(pca)
+```
+The table below shows the importance of each predictor in relation to each of the dimensions. Here, the magnitude of the predictor value indicates the importance of the predictor to the dimension. This table verifies the conclusions drawn from the plot below. 
+
+```{r fig.height=10, fig.width=10}
+pca$rotation[,1:2]
+```
+
+
+```{r,echo=FALSE}
+coords <- get_pca_ind(pca)
+
+dims <- coords$coord[,1:2]
+
+fips <- data_county %>% group_by(FIPS) %>% summarise()
+post_pca <- cbind(fips,dims)
+```
+
+The plots below show each of our counties now plotted on our transformed coordinate system, and colored by the party affiliation from the 2016 election. We can see that there appears to be a distinct clustering effect based on political affiliation, with some overlap at what we would consider to be a decision boundary. In our final verification step, we will try to predict the party affiliation of the 2020 election cycle based only on our 2 dimensions. The second plot shows the predictors that affected the position of the points the greatest. These are presented as vectors with the direction representing the direction and the magnitude representing the strength of the effect. 
+
+```{r,echo=FALSE,fig.height=10, fig.width=10}
+ggplot(post_pca, aes(x=Dim.1, y=Dim.2, color = data_county$party, size=data_county$county_population_density, alpha=.3)) + geom_point()
+
+ggbiplot(pca, groups = data_county$party)
+```
+
+
+
+Here we have created a bivariate cloropleth map. First, our counties are classified into one of 9 classes and assigned a color based on their class. This is displayed in the first visualization. Next, we have overlaid each of the counties onto a map of the United States in order to see if any trends appear. We first can see that although the groups are not well separated, there is a distinct pattern in the way that counties are grouped together. For instance, you can see that areas that are population centers are much different than areas that are rural. Additionally, we can see that areas along the coast, such as New York, LA, SF, Seattle, Miami, etc are grouped together. Rural areas in the Midwest share similar colors, as do areas in the Southeast, with population centers being much different than the rural areas. This suggests that the PCA is picking up not only sheer population and economic factors, but a hint of ideology as well.
+
+```{r,include=FALSE}
+require(latticeExtra)
+require(maps)
+require(classInt)
+require(grid)
+require(pals)
+
+```
+
+
+```{r,echo=FALSE,warning=FALSE,fig.height=15, fig.width=15}
+data(county.fips)
+
+colnames(county.fips)[1] <- "FIPS"
+post_pca <- merge(post_pca, county.fips, by="FIPS")
+
+cols <- brewer.qualseq 
+nbins <- 3
+
+# categorize rates into 3 percentile bins
+brksx <- classIntervals(post_pca$Dim.1, n=nbins, style='quantile')
+brksy <- classIntervals(post_pca$Dim.2, n=nbins, style='quantile')
+
+classx <- findCols(brksx)
+classy <- findCols(brksy)
+
+# convert x,y classes into a joint class x+3(y-1)
+post_pca$class2 <- classx + nbins*(classy-1)
+
+# scatterplot of two variates showing bins
+plot(Dim.1 ~ Dim.2, data=post_pca,
+     col=cols()[post_pca$class2], pch=19,
+     xlim=c(-20, 15), ylim=c(-20, 15))
+
+
+m3 <- mapplot(polyname ~ class2, data = post_pca,
+              colramp=cols, breaks=seq(from=0.5, by=1, length=nbins*nbins+1),
+              xlab="",
+              colorkey=FALSE,
+              map = map("county", plot = FALSE, fill = TRUE,
+                        projection = "tetra"),
+              scales = list(draw = FALSE))
+suppressWarnings(print(m3))
+
+m3leg <- levelplot(matrix(1:(nbins*nbins), nrow=nbins), axes=FALSE, col.regions=cols(),
+                   xlab="Dim.1  -->", ylab="Dim.2  -->", cuts=8, colorkey=FALSE,
+                   scales=list(draw=0))
+vp <- viewport(x=.15, y=.25, width=.2, height=.2)
+pushViewport(vp)
+print(m3leg, newpage=FALSE)
+popViewport()
+```
+
+```{r,echo=FALSE,eval=FALSE}
+write.csv(data_county, "/mnt/18246CDB246CBCFE/ProjectData/unacast/post-pca-V2.csv")
+```
+
+# Results and Discussion:
+
+We will now add the election data from the 2020 election cycle in order to create a classifier, and make predictions. The strength of the classifier will help us understand if the components chosen from our PCA actually do represent some meaningful coordinate system. 
+
+```{r}
+election_2020 <- read.csv("/mnt/18246CDB246CBCFE/ProjectData/unacast/2020election.csv")
+data_county <- merge(data_county, post_pca, by = "FIPS")
+election_results <- election_2020 %>% mutate(party_2020 = case_when(per_gop-per_dem > 0 ~ 'gop',
+                                                               per_gop-per_dem < 0 ~ 'dem')) %>%
+  select(county_fips,party_2020) %>% rename(FIPS = county_fips)
+
+data_county <- inner_join(data_county,election_results,BY="FIPS")
+```
+
+## Suport Vector Classifier:
+
+For this step, we have selected a Support Vector Classifier (SVC). This classifier was chosen because of the clear clustering effect that was seen on the visualizations of the counties in their new coordinate system, and what we can interpret as a very clear decision boundary from the 2016 election results. The code below is included to show how the target `party_2020` was created and added to the feature data which will be used in the SVC. We have chosen to partition the data into a 70/30 training/testing split, so that we can validate our results and view predictions on unseen data. SVC's are a machine learning technique in which a loose hyper-plane is created, often referred to as a "decision boundary". Points falling on either side of the hyper-plane are classified within the respective class that the boundary seeks to bisect, with some room for points within a marginal distance to be evaluated and assigned a class prediction on a case by case basis. 
+
+```{r}
+data_county$party_2020 <- as.factor(data_county$party_2020)
+features <- data_county %>% select(c(Dim.1, Dim.2,party_2020,FIPS))
+
+training_index <- createDataPartition(features$party_2020,
+                                      times = 1,
+                                      p = 0.7,
+                                      list = FALSE)
+
+features_train <- features[training_index,]
+features_test <- features[-training_index,]
+```
+
+We have trained a linear Support Vector Classifier, meaning that the choice of hyper-plane is linear in nature. This was chosen due to the linearity we saw in our clusters when analyzing the dimensions from the PCA. Viewing the results of the trained model shows us that it is getting about 91.93% accuracy, with a Kappa, accuracy beyond what could be considered random chance, of about 68.41%.
+
+```{r,cache=TRUE}
+svm_linear <- train(party_2020 ~ Dim.1 + Dim.2,
+                data = features_train, 
+                method = "svmLinear")
+
+svm_linear$results
+```
+
+When tested on the unseen data, we are seeing an accuracy of about 93.23%. We can also say with about 95% confidence that our model would classify at between 91.39% and 94.78% on data like what we see here. The p-value of the model (<2.2e-16) tells us that our model is statistically significant. We have chosen the "positive" class here to be "gop" because of the prevalence of observations in that class in our data. Our high sensitivity (True Positive Rate) tells us that our classifier has done a good job with observations in this class. We will note that our specificity (True Negative Rate) tells us that our model is struggling slightly with observations in the "dem" class. 
+
+```{r}
+features_test <- features_test %>%  mutate(preds = predict(svm_linear, newdata = features_test))
+
+svm_predictions <- predict(svm_linear, features_test)
+
+confusionMatrix(data = svm_predictions,
+                reference = features_test$party_2020,
+                positive = "gop")
+
+features_test <- features_test %>% mutate(svm_pred = svm_predictions)
+```
+
+From the table below, we can see that the model is very imbalanced, so this result is to be expected. 
+
+```{r}
+features %>% group_by(party_2020) %>% summarise(n = n())
+```
+
+## Naive Bayes Classifier:
+
+We have also chosen to perform the same predictions using a Naive Bayes Classifier. Naive Bayes Classifiers assign class membership via a probabilistic model which uses Bayes' Theorem in order to evaluate the likelihood of each point being within a certain class, given the data. Additionally, the main assumption of independence between the predictors makes a Naive Bayes Classifier a good choice for a wide range of classification tasks, although, we can see here that with training accuracy of 90.25%, and testing accuracy of 90.68%, this classifier is outperformed by the SVM. It is also a slightly less significant model, though the p-value (9.951e-11) still falls well below the significance mark at the 95% significance level.
+
+```{r}
+nb_model <- train(party_2020 ~ Dim.1 + Dim.2,
+                  data = features_train,
+                  method = "naive_bayes")
+
+nb_model$results
+
+nb_model$finalModel
+
+nb_predictions <- predict(nb_model, features_test)
+
+confusionMatrix(data = nb_predictions,
+                reference = features_test$party_2020,
+                positive = "gop")
+
+features_test <- features_test %>% mutate(nb_pred = nb_predictions)
+```
+
+
+```{r,include=FALSE}
+n_breaks <- 100
+
+PredA <- seq(min(features_test$Dim.1), max(features_test$Dim.1),
+             length = n_breaks)
+
+PredB <- seq(min(features_test$Dim.2), max(features_test$Dim.2),
+             length = n_breaks)
+
+Grid <- expand.grid(Dim.1 = PredA, Dim.2 = PredB)
+
+Grid <- Grid %>%  mutate(Dim.1 = mean(features_test$Dim.1),
+                         Dim.2 = mean(features_test$Dim.2))
+
+nb_predictions <- predict(nb_model, Grid)
+
+Grid <- Grid %>% mutate(preds = nb_predictions)
+
+Grid %>% ggplot(aes(x = Dim.1, y = Dim.2)) +
+  geom_tile(aes(fill = preds), alpha=0.3) +
+  geom_point(data=features_test, aes(x=Dim.1, y=Dim.2, col=party_2020))
+
+```
+
+
+## Linear Discriminant Analysis:
+
+Finally, we fit a Linear Discriminant Classifier. This technique uses a Linear Discriminant to try to create a set of linear predictors that will describe the boundary between classes in order to create a decision boundary between classes for which each observation will be assigned. This model had the poorest performance of the three with a training accuracy of 90.67%, and testing accuracy of 90.68%. The most troubling thing about this model is that it struggles to predict the Democrat class at anything beyond random chance, which can be seen in the confusion matrix below. 
+
+```{r}
+lda_model <- train(form = party_2020 ~ Dim.1 + Dim.2,
+                   data = features_train,
+                   method = "lda2")
+
+lda_model
+lda_model$results
+
+summary(lda_model)
+
+lda_model$finalModel
+
+
+#builds the confusion matrix for the LDA model
+lda_predictions <- predict(lda_model, features_test)
+
+confusionMatrix(data = lda_predictions,
+                reference = features_test$party_2020,
+                positive = "gop")
+features_test <- features_test %>% mutate(lda_pred = lda_predictions)
+```
+
+```{r,include=FALSE}
+#plots the decision boundary for the LDA  with all background variables set to their mean value
+n_breaks <- 100
+
+PredA <- seq(min(features_test$Dim.1), max(features_test$Dim.1),
+             length = n_breaks)
+
+PredB <- seq(min(features_test$Dim.2), max(features_test$Dim.2),
+             length = n_breaks)
+
+Grid <- expand.grid(Dim.1 = PredA, Dim.2 = PredB)
+
+Grid <- Grid %>%  mutate(Dim.1 = mean(features_test$Dim.1),
+                         Dim.2 = mean(features_test$Dim.2))
+
+lda_predictions <- predict(lda_model, Grid)
+
+Grid <- Grid %>% mutate(preds = lda_predictions)
+
+Grid %>% ggplot(aes(x = Dim.1, y = Dim.2)) +
+  geom_tile(aes(fill = preds), alpha=0.3) +
+  geom_point(data=features_test, aes(x=Dim.1, y=Dim.2, col=party_2020))
+
+```
+
+
+# Conclusion:
+
+In this project, we set out to create a non-spatially dependent coordinate system on which we could locate each county in the United States based on social, ideological, economic, and demographic features of the population. Data was collected from several sources and engineered by selecting relevant features, transforming features, and then finally centering and scaling the data to create a unit-less representation of each of the source features on which we chose to model. We then performed a Principal Components Analysis on the source data in order to create a transformed set of orthogonal features from which we selected the two strongest in terms of explained variance in the data. These two components became our dimensions in which we would locate our counties. Analysis of the chosen features showed that our chosen dimensions serve well in clustering counties by population differences without respect to any spatial dependence.
+
+In analyzing our transformed features, we noted that some of the key demographic traits of each county performed well as the strongest indicators of where a county was assigned in our new coordinate system. Factors such as education and economic indicators tended to affect our components in one dimension, while opposing factors such as ethnicity, political affiliation, and ideological factors tended to affect the components in the other. Our analysis of the resultant county class assignments when superimposed on a map of the United States showed that our dimensions were able to tease out more subtle differences in the populations of each of the counties in the United States which were included in our analysis. We saw that rural areas were different from population centers across the country, and there were even noticeable trends in the regional differences in populations. We also saw that the regional trends were more pronounced for rural areas, as population centers tended to be more similar regardless of the physical region in which they are located. 
+
+Finally, we sought to quantify the strength of our new coordinate system. In order to do this, we chose to build several classifiers which would attempt to predict the results of the 2020 Presidential election cycle based solely on our two created feature dimensions. Based on the clusters that emerged from the resultant dimensions from our PCA, we chose a Support Vector Machine as the primary classifier by which to make these predictions, with Naive Bayes and Linear Discriminant Classifiers added for comparison. All three classifiers performed well, with the SVM making predictions with the strongest accuracy, about 93.23% on unseen data. We also saw that our models suffered slightly from the presence of class imbalance in our dichotomous classes of "GOP" and "DEM", with the "GOP" class accounting for about 83% of all observations in our data. Overall, we can say that our reduced dimensionality coordinate system that was created by selecting the first two principal components is an accurate representation of the given factors that distinguish counties from one another based on the results of our classifier predictions. 
+
+
+# Future Work and Limitations:
+
+Moving forward, while this data could be used directly by researchers who are modeling differences in different counties, depending on the application, it may be necessary to recreate the coordinate system by including more relevant predictors to the analysis being performed. The data set created in the pre-processing steps captures only a few of the factors that differentiate populations across different areas, so future projects may seek to combine additional, or different sources of data to describe the underlying latent differences. This technique could also be applied to completely different sets of predictors as well, in order to create a coordinate system for each county which would describe factors in other domains. For instance, if one were interested in making class predictions in the agricultural market for the purposes of sales forecasting, then domain-specific predictors could be used in place of the demographic features seen here. This technique could also be applied to explain differences in non population-based domains, such as physical features, economic makeup, etcetera. Another one of the major limitations of this technique is the way in which data was collected. In order to locate data which would describe such a vast number of factors, data from several different sources was required. If this technique were to be improved upon, source data would be one of the first areas to address.   
+
+
+
+## Source Data:
+
+2020 election data - https://github.com/tonmcg/US_County_Level_Election_Results_08-20/blob/master/2020_US_County_Level_Presidential_Results.csv
+COVID-19 Adherence data - https://www.unacast.com/covid19
+Demographic data - https://github.com/Deleetdk/USA.county.data, https://data.census.gov/cedsci/
+Religion data - https://www.thearda.com/Archive/Files/Descriptions/RCMSCY10.asp

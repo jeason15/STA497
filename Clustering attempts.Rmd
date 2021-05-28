@@ -1,0 +1,130 @@
+---
+title: 'Social distancing data: trajectory and longitudinal clustering'
+author: "Aimee Schwab-McCoy"
+date: "Last updated: `r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE)
+set.seed(041518)
+```
+
+## Trajectory clustering using the `traj` package
+
+Data should consist of two data frames:
+
+1. Individual trajectories along the rows
+2. Time each individual trajectory was measured (again along the rows)
+
+Trajectory clustering works by computing 24 measures of each trajectory, such as range, mean, standard deviation, slope, etc., and then clustering based on these measures.
+
+```{r, echo=TRUE}
+library(traj)
+
+# Individual trajectories are stored in each row
+head(example.data$data)
+
+# Time points for each trajectory are stored in the rows
+head(example.data$time)
+
+# Compute measures using step1measures
+s1 = step1measures(example.data$data, example.data$time, ID = TRUE)
+
+# Use factor analysis to select a subset of features
+s2 = step2factors(s1)
+
+# Cluster trajectories based on the factor analysis
+s3 = step3clusters(s2, nclusters = 4)
+
+#plot(s3)
+#plotMeanTraj(s3)
+
+```
+
+Convert sample code from vignette to data for each state with a protest.
+
+Daily distance difference:
+
+```{r, warning=FALSE, message=FALSE}
+County_Data <- read.csv("E:\\ProjectData\\unacast\\sds-v3-full-county.csv")
+LockdownProtests <- read.csv("E:\\ProjectData\\unacast\\LockdownProtests.csv")
+
+library(tidyverse)
+#library(patchwork)
+
+FIPS_list <- unique(LockdownProtests$FIPS)
+State_list <- unique(LockdownProtests$STATE)
+
+County_Data$date <- as.Date(County_Data$date)
+LockdownProtests$DATE <- as.Date(LockdownProtests$DATE)
+
+# County_Data <- County_Data %>% 
+#   group_by(county_fips) %>%
+#   mutate_each_(funs(scale),vars=c('daily_distance_diff',
+#                                   'daily_visitation_diff',
+#                                   'encounters_rate'))
+
+for(i in 3:3){
+
+    state_data <- County_Data %>% 
+      filter(state_code == State_list[i]) %>% 
+      select(county_fips, 
+             date, 
+             daily_distance_diff)
+    
+    #head(state_data)
+    
+    state_traj <- state_data %>% 
+      pivot_wider(names_from = date, 
+                  values_from = daily_distance_diff)
+    
+    state_date <- state_data %>% 
+      select(-daily_distance_diff) %>% 
+      pivot_wider(names_from = date, 
+                  values_from = date)
+    
+    s1 = step1measures(state_traj, state_date, ID = TRUE)
+    head(s1)
+    
+    # if(i == 1){ 
+    #   discard <- c("m6", "m20", "m21", "m22", "m23", "m24") 
+    # } else  if (i==5){ 
+    #     discard <- c("m6", "m11", "m12", "m13", "m14", "m15", 
+    #                  "m16", "m17", "m19", "m20", "m21", 
+    #                  "m22", "m23", "m24")
+    # } else {
+    #       discard <- "m6"
+    #       }
+  
+    # Use factor analysis to select a subset of features
+    s2 = step2factors(s1, discard=c("m3", "m6"))
+    
+    # Cluster trajectories based on the factor analysis
+    s3 = step3clusters(s2, nclusters = 5)
+    
+    #plot(s3)
+    #plotMeanTraj(s3)
+    
+    clusters <- tibble(county_fips=s3$clusters$ID$county_fips,
+                       cluster=s3$clusters$cluster)
+    
+    state_data <- state_data %>% inner_join(clusters)
+    
+    plot <- state_data %>% 
+        mutate(protest = ifelse(county_fips %in% FIPS_list, 2, 1)) %>%
+        arrange(desc(protest)) %>%
+        ggplot(aes(x=date, y=daily_distance_diff,
+                   group=county_fips)) + 
+        geom_line(aes(col=protest, alpha=protest/2)) + 
+        facet_grid(~cluster) + 
+        guides(col=FALSE, lwd=FALSE, alpha=FALSE) + 
+        labs(title=paste('State: ', State_list[i])) 
+    
+    table <- clusters %>% group_by(cluster) %>% summarize(n=n())
+}
+
+plot
+table
+  
+```

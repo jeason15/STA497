@@ -1,0 +1,44 @@
+---
+title: "Social Distanciing Data"
+subtitle: "Summaries by week"
+author: "Aimee Schwab-McCoy"
+date: "Last updated: `r Sys.Date()`"
+output: html_document
+---
+
+__Description__: This script summarizes the data by week and reports weekly averages.
+
+```{r, warning=FALSE, message=FALSE}
+## Read in data
+sds_data <- read.csv("~/Desktop/Social Distancing Project/sds-v3-full-county.csv")
+
+head(sds_data)
+
+## Load the required libraries: tidyverse, lubridate
+library(tidyverse)
+library(lubridate)
+
+## Create a function to calculate mode (not in base R)
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+# Group data by week and calculate mean/mode
+sds_weekly <- sds_data %>% 
+  mutate(week = isoweek(date)) %>%
+  group_by(week, county_fips) %>%
+  summarize(mean_diff = mean(daily_distance_diff, na.rm=TRUE),
+            mode_grade_diff = Mode(grade_distance),
+            mean_grade_diff = mean(n_grade_distance, na.rm=TRUE),
+            mean_visit = mean(daily_visitation_diff, na.rm=TRUE),
+            mode_grade_visit = Mode(grade_visitation),
+            mean_grade_visit = mean(n_grade_visitation, na.rm=TRUE),
+            mean_encounters = mean(encounters_rate, na.rm=TRUE),
+            mode_grade_encounters = Mode(grade_encounters),
+            mean_grade_encounters = mean(n_grade_encounters, na.rm=TRUE))
+            
+head(sds_weekly)
+
+write.csv(sds_weekly, 'sds_weekly.csv')
+```

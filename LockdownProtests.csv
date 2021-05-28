@@ -1,0 +1,76 @@
+﻿STATE,CITY,County,FIPS,DATE,ATTENDEES
+AK,Anchorage,Anchorage,2020,2020-04-23,
+AL,Montgomery,Montgomery,1101,2020-04-21,60
+CA,Encinatas,San Diego,6073,2020-04-25,
+CA,Encinitas,San Diego,6073,2020-04-19,200
+CA,Huntington Beach,Orange,6059,2020-04-17,200
+CA,Huntington Beach,Orange,6059,2020-05-01,2500
+CA,Laguna Beach,Orange,6059,2020-05-02,100+
+CA,Rancho Cucamonga,San Bernadino,6071,2020-05-03,300
+CA,Sacremento,Sacramento,6069,2020-05-01,100+
+CA,Sacremento,Sacramento,6069,2020-05-23,
+CA,San Clemente,Orange,6059,2020-05-21,
+CA,San Diego,San Diego,6073,2020-04-18,200+
+CA,San Diego,San Diego,6073,2020-04-25,200+
+CA,San Francisco,San Francisco,6075,2020-05-01,150
+CA,Ventura,Ventura,6111,2020-05-01,1000
+CO,Denver,Denver,8031,2020-04-19,
+CT,Hartford,Hartford,9003,2020-04-20,100+
+FL,Clearwater,Pinellas,12103,2020-05-11,25
+FL,Tallahassee,Leon,12073,2020-04-18,
+ID,Boise,Ada,16001,2020-04-17,200+
+IL,Chicago,Cook,17031,2020-05-01,
+IN,Indianapolis,Marion,18097,2020-04-18,250
+KY,Frankfort,Franklin,21073,2020-04-15,<50
+KY,Frankfort,Franklin,21073,2020-05-25,
+MA,Boston,Suffolk,25025,2020-05-04,100+
+MA,Fall River,Bristol,25005,2020-04-26,
+MA,Swampscott,Essex,25009,2020-04-23,12
+MD,Annapolis,Anne Arundel,24003,2020-04-18,100+
+MI,Lansing,Ingham,26065,2020-04-15,3000
+MI,Lansing,Ingham,26065,2020-04-30,100+
+MI,Lansing,Ingham,26065,2020-05-14,
+MN,Albany,Stearns,27145,2020-05-23,200
+MN,St. Paul,Ramsey,27123,2020-04-17,800
+MS,Jackson,Hinds,28049,2020-04-25,>50
+NC,Raleigh,Wake,37183,2020-04-14,100
+NC,Raleigh,Wake,37183,2020-04-21,300
+ND,Bismarck,Burleigh,38015,2020-04-20,
+NH,Concord,Merrimack,33013,2020-04-17,100+
+NJ,Hamilton,Mercer,34021,2020-04-17,
+NJ,Trenton,Mercer,34021,2020-04-17,
+NM,Santa Fe,Santa Fe,35049,2020-04-24,<50
+NV,Carson City,Carson City,32510,2020-04-18,200+
+NY,Albany,Albany,36001,2020-04-21,<100
+NY,"Commack, Long Island",Suffolk,36103,2020-05-01,100+
+NY,Staten Island,Richmond,36085,2020-05-15,200
+OH,Bexley,Franklin,39049,2020-05-02,<25
+OH,Columbus,Franklin,39049,2020-04-09,75
+OH,Columbus,Franklin,39049,2020-04-13,200-300
+OH,Columbus,Franklin,39049,2020-04-17,100+
+OH,Columbus,Delaware,39041,2020-04-09,75
+OH,Columbus,Delaware,39041,2020-04-13,200-300
+OH,Columbus,Delaware,39041,2020-04-17,100+
+OH,Columbus,Delaware,39045,2020-04-09,75
+OH,Columbus,Delaware,39045,2020-04-13,200-300
+OH,Columbus,Delaware,39045,2020-04-17,100+
+OR,Redmond,Deschutes,41017,2020-04-17,200
+OR,Salem,Marion,41047,2020-04-17,<50
+OR,Salem,Marion,41047,2020-05-01,
+OR,Salem,Polk,41053,2020-04-17,<50
+OR,Salem,Polk,41053,2020-05-01,
+PA,Harrisburg,Dauphin,42043,2020-04-20,100+
+RI,Providence,Providence,44007,2020-04-25,
+TX,Austin,Travis,48453,2020-04-18,
+TX,Austin,Travis,48453,2020-05-23,<50
+TX,Austin,Hays,48209,2020-04-18,
+TX,Austin,Hays,48209,2020-05-23,<50
+TX,Austin,Williamson,48491,2020-04-18,
+TX,Austin,Williamson,48491,2020-05-23,<50
+VT,Montpelier,Washington,50023,2020-04-20,20
+WA,Olympia,Thurston,53067,2020-04-19,2000+
+WA,Olympia,Thurston,53067,2020-05-01,
+WA,Seattle,King,53033,2020-04-26,<50
+WI,Madison,Dane,55025,2020-04-24,2000+
+WI,Madison,Dane,55025,2020-05-01,
+WY,Cheyenne,Laramie,56021,2020-04-20,
