@@ -33,17 +33,21 @@ The data set represents demographic data collected and combined from several sou
 ```{r,include=FALSE}
 original_data <- read.csv("/mnt/18246CDB246CBCFE/ProjectData/unacast/final-data.csv")
 
-data <- original_data %>% select(-c(X,date,covid,Latitude.x,Longitude.x,covid,county_name,state_code,WIN2016))
+data <- original_data %>% select(-c(X,date,covid,covid,WIN2016))
 
-data_county <- data %>% group_by(FIPS) %>% summarise(county_population_density=max(county_population)/max(Square.Miles),          daily_distance_diff=min(daily_distance_diff),                                                     encounters_rate=min(encounters_rate),                                                                                 avg_hh_size=max(Average.Household.Size),                                                     living_alone=max(X..Living.Alone),                                                     bach_degree=max(X..Bachelors.Degree),                                                     grad_degree=max(X..Graduate.Degree),                                                     internet_access=max(X..Broadband),                                                     mhhi=max(Median.Household.Income),                                                     mean_min_to_work=max(Mean.Minutes.To.Work),gini=max(Gini.Index),                                                     unemployment=max(X..Unemployment.Rate),median_age=max(Median.Age),                                                     perc_dem_2016=max(PCDEM2016),perc_gop_2016=max(PCGOP2016),                                                     perc_obesity=max(PCOBESITY),                                                     establishments=max(All.Establishments),                                                     employees=max(All.Employees),payroll=max(All.Payroll)) 
+data_county <- data %>% group_by(FIPS) %>% summarise(county_population_density=max(county_population)/max(Square.Miles),          daily_distance_diff=min(daily_distance_diff),                                                     encounters_rate=min(encounters_rate),                                                                                 avg_hh_size=max(Average.Household.Size),                                                     living_alone=max(X..Living.Alone),                                                     bach_degree=max(X..Bachelors.Degree),                                                     grad_degree=max(X..Graduate.Degree),                                                     internet_access=max(X..Broadband),                                                     mhhi=max(Median.Household.Income),                                                     mean_min_to_work=max(Mean.Minutes.To.Work),gini=max(Gini.Index),                                                     unemployment=max(X..Unemployment.Rate),median_age=max(Median.Age),                                                     perc_dem_2016=max(PCDEM2016),perc_gop_2016=max(PCGOP2016),                                                     perc_obesity=max(PCOBESITY),                                                     establishments=max(All.Establishments),                                                     employees=max(All.Employees),payroll=max(All.Payroll), lat = max(Latitude.x), long = max(Longitude.x), county_name = county_name, state = state_code) 
 
 data_county <- distinct(data_county)
 data_county <- na.omit(data_county)
 
+party <- case_when((data_county$perc_dem_2016-data_county$perc_gop_2016) < 0 ~ "gop", 
+                   (data_county$perc_dem_2016-data_county$perc_gop_2016) > 0 ~ "dem")
+
+data_county <- cbind(data_county, party)
 
 religion_data <- read_excel("/mnt/18246CDB246CBCFE/ProjectData/unacast/religion.xlsx")
 religion_data_small <- religion_data %>% select(FIPS, TOTCNG, TOTRATE)
-data_county <- inner_join(data_county,religion_data_small,by = 'FIPS')
+data_county <- inner_join(data_county,religion_data_small,by = 'FIPS') %>% rename(party="...25")
 
 data(USA_county_data)
 
@@ -52,8 +56,6 @@ county_data <- USA_county_data %>% select(fips, White, Black, Hispanic, Asian, A
 data_county <- inner_join(data_county,county_data,BY="FIPS")
 data_county <- na.omit(data_county)
 
-data_county <- data_county %>% mutate(party=case_when((data_county$perc_dem_2016-data_county$perc_gop_2016) < 0 ~ "gop",
-                                                      (data_county$perc_dem_2016-data_county$perc_gop_2016) > 0 ~ "dem"))
 ```
 
 +----------------------------------------------------+-----------------------------------------------------------------+
@@ -130,14 +132,23 @@ data_county <- data_county %>% mutate(party=case_when((data_county$perc_dem_2016
 
 Additionally, we will take a look at the kind of data we are dealing with in terms of data type and some example observations for each of the predictors. From this, we can see that 3,034 of the 3,142 counties are represented. The exclusion of certain counties is due to the fact that there are important features which sparsely contained values of `N/A`, with no reliable means of imputation. From our original data sources, we have compiled and engineered 35 features which we believe accurately describe the socioeconomic and demographic makeup of each county in a way that enables us to continue with the creation of our feature dimensions via PCA. The features selected are all numeric, with the exception of `party`, which will be used purely for assistance in visualization of the dimensions that are plotted when we analyze our principal components. It is important to note that PCA requires a standardization of the data, which will be done at the time the data is preprocessed for the PCA just before it is fed into the model. However, it must be considered nonetheless. We will use z-standardization, $Z = \frac{y_i-\mu}{s}$, where $s = \frac{\sigma}{\sqrt{n}}$. These $Z$-scores transforms each predictor to a scale with mean $\mu = 0$, and $\sigma = 1$. Hence, all observations will express the number of standard deviations from the mean, 0, each point exists. This is necessary to ensure that the magnitude of any individual variable does not cause that variable to become more "important" than any other. If each of our predictors were all in the same unit of measure, this would not be necessary. From our data dictionary, and the table below, we can see that this process will be crucial to our model.  
 
-```{r,echo=FALSE}
+```{r,echo=FALSE fig.height=10, fig.width=10, r,echo=FALSE}
 glimpse(data_county)
+
+data_county %>% ggplot(aes(x=long, y=lat, col=party, alpha=0.2)) + 
+  geom_point() +
+  scale_color_manual(values = c("dem" = "blue",
+                                "gop"="red")) +
+  theme(legend.position = "none") +
+  labs(title = "United States County Clustering", subtitle = "by physical location")
+
+ggsave("statemap.jpg")
 ```
 
 The correlation matrix below shows us which variables are related to others, as well as uncovers certain trends in our data. This will be a useful tool in our analysis of the feature dimensions that we will extract from our PCA. Looking at the plot, we can see some things that our intuition would suggest. For instance, The associations between `uninsured` and the other covariates follows a relationship that we would expect; education, lack of poverty, and in some cases, race all share a negative association with lacking insurance. `county_population_density` also shares associations that are reasonable. Because the PCA technique creates linearly independent components, we do not need to be concerned about any multicollinearity in our data. This plot does serve as a good means by which we can verify the reasonableness of our data set. It gives us a good sense of whether our data is likely accurate, especially because of the means by which it was built from several distinct data sets from different sources. 
 
 ```{r fig.height=15, fig.width=15,echo=FALSE}
-features <- data_county %>% select(-c(FIPS,party))
+features <- data_county %>% select(-c(FIPS,party,lat,long,county_name,state))
 corr <- cor(features, use="pairwise.complete.obs")
 corrplot(corr)
 ```
@@ -147,7 +158,7 @@ corrplot(corr)
 In this section, we will perform the Principal Components Analysis on the data. As discussed previously, this technique creates a set of $p-1$ principal components from $p$ original predictors. Each one of the resultant PC's are linearly independent from one another, making them a great tool for use in modeling techniques that require independence of predictors. From these PC's we have decided to choose only the first two, which will represent our transformed coordinate system, though generally, this choice for number of components to be used would occur after the PCA is fit. The summary below shows us the proportion of variance in the data that each of the PC's can "account" for. In our case, PC1 accounts for about 22.72% of the variance in the data, and PC2 accounts for about 18.93% of the variance in the data. Generally speaking, the number of PC's selected would be based on the cumulative proportion of variance explained, with the goal being to choose a threshold of variance, say 90%, and choose the number of PC's necessary to cumulatively account for that. Our choice of 2 PC's leaves our cumulative explained variance low, being only at about 41.65%. However, we have provided justification for our choice based on our needs, and feel that this is sufficient. 
 
 ```{r}
-pca_features <- data_county %>% select(-c(FIPS,party))
+pca_features <- data_county %>% select(-c(FIPS,party,lat,long, county_name, state))
 pca <- prcomp(pca_features, center = TRUE, scale. = TRUE)
 summary(pca)
 ```
@@ -182,7 +193,13 @@ post_pca <- cbind(fips,dims)
 The plots below show each of our counties now plotted on our transformed coordinate system, and colored by the party affiliation from the 2016 election. We can see that there appears to be a distinct clustering effect based on political affiliation, with some overlap at what we would consider to be a decision boundary. In our final verification step, we will try to predict the party affiliation of the 2020 election cycle based only on our 2 dimensions. The second plot shows the predictors that affected the position of the points the greatest. These are presented as vectors with the direction representing the direction and the magnitude representing the strength of the effect. 
 
 ```{r,echo=FALSE,fig.height=10, fig.width=10}
-ggplot(post_pca, aes(x=Dim.1, y=Dim.2, color = data_county$party, size=data_county$county_population_density, alpha=.3)) + geom_point()
+ggplot(post_pca, aes(x=Dim.1, y=Dim.2, color = data_county$party, size=data_county$county_population_density, alpha=.3)) + geom_point() + 
+  theme(legend.position = 'none') + 
+  labs(title = "United States County Positions", subtitle = "by feature projection") +
+  scale_color_manual(values = c("dem" = "blue",
+                                "gop"="red"))
+
+ggsave("pcamap.jpg")
 
 ggbiplot(pca, groups = data_county$party)
 ```
